@@ -6,12 +6,9 @@ import logging
 class ConfigLoader:
     """配置加载器，从配置文件读取节点源和其他设置"""
     
-    def __init__(self):
-        # 默认节点源列表已移除，将通过config.txt完全管理
-        pass
-    
     def load_config(self):
         """加载配置，优先使用config/config.txt"""
+        # 默认配置
         config = {
             "SOURCES": [],
             "TIMEOUT": 5,
@@ -20,18 +17,19 @@ class ConfigLoader:
             "MAX_RETRY": 2
         }
         
+        # 预编译URL正则表达式
+        url_pattern = re.compile(r'^https?://')
+        
         # 尝试多个可能的配置文件路径
-        possible_paths = []
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        possible_paths.extend([
-            os.path.join(current_dir, "config", "config.txt"),  # 使用config子目录
+        possible_paths = [
+            os.path.join(current_dir, "config", "config.txt"),
             os.path.join(current_dir, "config.txt"),
             "config/config.txt",
             "config.txt"
-        ])
+        ]
         
         # 尝试所有可能的路径
-        config_loaded = False
         for path in possible_paths:
             try:
                 if os.path.exists(path):
@@ -41,16 +39,15 @@ class ConfigLoader:
                         
                         for line in f:
                             line = line.strip()
-                            if line.startswith('#') or not line:
+                            if not line or line.startswith('#'):
                                 continue
                             
                             # 解析配置项
                             if '=' in line:
                                 key, value = line.split('=', 1)
-                                key = key.strip()
-                                value = value.strip()
+                                key, value = key.strip(), value.strip()
                                 
-                                if key == "SOURCES":
+                                if key == "SOURCES" and url_pattern.match(value):
                                     config[key].append(value)
                                 elif key in config:
                                     if key in ["TIMEOUT", "WORKERS", "MAX_RETRY"]:
@@ -61,11 +58,13 @@ class ConfigLoader:
                                     else:
                                         config[key] = value
                             # 简化格式：直接识别URL
-                            elif re.match(r'^https?://', line):
+                            elif url_pattern.match(line):
                                 config["SOURCES"].append(line)
                     
+                    # 去重节点源，避免重复请求
+                    config["SOURCES"] = list(dict.fromkeys(config["SOURCES"]))
+                    
                     logging.info(f"成功加载配置文件: {path}")
-                    config_loaded = True
                     break
             except Exception as e:
                 logging.error(f"加载配置文件 {path} 失败: {str(e)}")
